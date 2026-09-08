@@ -1,0 +1,13 @@
+.gscsf { max-width: 1120px; }
+.gscsf h1 small { color: #646970; font-size: 14px; }
+.gscsf-card { background: #fff; border: 1px solid #dcdcde; border-radius: 6px; padding: 20px 24px; margin: 18px 0; }
+.gscsf-card h2 { margin-top: 0; }
+.gscsf p { line-height: 1.65; }
+.gscsf progress { width: 100%; height: 16px; accent-color: #2271b1; }
+.gscsf textarea, .gscsf input[type="text"] { width: 100%; max-width: 780px; }
+.gscsf-result { border-top: 1px solid #dcdcde; margin-top: 16px; padding-top: 4px; overflow-wrap: anywhere; }
+.gscsf-result li { margin: 10px 0; line-height: 1.6; }
+.gscsf #gscsf-message:not(:empty) { padding: 12px; border-left: 4px solid #2271b1; background: #f0f6fc; }
+.gscsf [hidden] { display: none !important; }
+.gscsf #gscsf-history { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .gscsf-card { padding: 16px; } .gscsf .button { margin-bottom: 8px; } }
