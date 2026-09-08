@@ -10,6 +10,6 @@ global $wpdb;
 $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}gscsf_urls");
 $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}gscsf_changes");
 delete_post_meta_by_key('_gscsf_repairs');
-foreach (array('gscsf_version', 'gscsf_settings', 'gscsf_job', 'gscsf_lock', 'gscsf_ahrefs', 'gscsf_resource_limit', 'gscsf_sitemap_seen') as $name) { delete_option($name); }
+foreach (array('gscsf_version', 'gscsf_settings', 'gscsf_job', 'gscsf_lock', 'gscsf_ahrefs', 'gscsf_resource_limit', 'gscsf_sitemap_seen', 'gscsf_profile') as $name) { delete_option($name); }
 $names = $wpdb->get_col($wpdb->prepare("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like('gscsf_q_') . '%', $wpdb->esc_like('_transient_gscsf_') . '%', $wpdb->esc_like('_transient_timeout_gscsf_') . '%'));
 foreach ($names as $name) { delete_option($name); }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.2.0 — 2026-09-08
+
+- Detect website type and public-content/commerce/SEO evidence before every scan.
+- Add six accessible repair-group toggles, a detect button, finding filters, coverage details and exact repair codes in history.
+- Add single-empty-description, relative-canonical, language, viewport, saved image-dimension and verified permanent internal-link repairs.
+- Preserve failed/remaining repair candidates for a new manual pass; accumulate successful fixes across passes.
+- Resolve eligible imported/discovered page URLs to WordPress posts.
+- Purge supported WP Rocket/LiteSpeed caches before verification and on undo/rollback.
+- Add portable regression tests and updated repair/coverage documentation.
+- Keep Google-only actions and unavailable report coverage explicitly separate from local automatic repairs.
+
 ## 5.1.0 — 2026-09-08
 
 - Added bounded Ahrefs ZIP/CSV/TSV import with UTF-16 support, duplicate-file detection, domain separation and utility-page exclusion. Export patch columns are never applied.

@@ -1,6 +1,14 @@
-# Validation report — 5.1.0
+# Validation report — 5.2.0
 
 Tested 8 September 2026 in an isolated WordPress 7.1 installation, PHP 8.3.33, and the WordPress Performance Team's SQLite Database Integration. The runtime, database and test-only fixtures are outside the release ZIP. No live customer website or Google account was modified.
+
+## Version 5.2 validation
+
+- All 40 existing integration assertions and 23 Ahrefs assertions pass against the updated build.
+- 25 new regression assertions cover empty metadata, canonical preservation, language/viewport, permanent/temporary/broken/external links, fragments, base elements, responsive images, toggles, general/commerce detection, scan phase ordering, repair transactions and undo.
+- Real HTTP confirms detection and coverage AJAX, six repair controls and filters in dashboard HTML, existing authorization/nonce checks, and anonymous repair/undo.
+- PHP and JavaScript syntax checks pass. Cache-provider APIs are documented integrations; live WP Rocket/LiteSpeed installations were not available.
+- Installable ZIP excludes Git metadata and test scripts.
 
 ## Passed
 

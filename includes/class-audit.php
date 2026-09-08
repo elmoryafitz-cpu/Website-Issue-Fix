@@ -149,7 +149,7 @@ class GSCSF_Audit {
         $blocked = self::blocked($directives);
         if ($blocked) { $out[] = self::issue('noindex', 'A noindex/none directive is present. Review intent in WordPress, your SEO plugin or server configuration; it is preserved.', false, 'info'); }
         $safe = self::eligible($post) && !$blocked && untrailingslashit($url) === untrailingslashit(get_permalink($post));
-        $out = array_merge($out, GSCSF_Extended::analyze($url, $html, $post, $safe));
+        $out = array_merge($out, GSCSF_Extended::analyze($url, $html, $post, $safe), GSCSF_Repairs::analyze($html, $url, $post, $safe));
         if (($response['gscsf_elapsed_ms'] ?? 0) > 3000) { $out[] = self::issue('slow_fetch', 'Full HTTP fetch exceeded 3 seconds. This single server-side measurement is not TTFB, browser load time or Core Web Vitals; review hosting and caching.', false, 'info'); }
         $public_title = $safe && trim($post->post_title) !== '' && strpos(self::public_text($html), wp_strip_all_tags($post->post_title)) !== false;
         if (!$f['titles'] || $f['titles'][0] === '') {
@@ -158,7 +158,7 @@ class GSCSF_Audit {
         if (!$f['descriptions']) {
             $out[] = self::issue('missing_description', 'No meta description. Auto Fix can derive a short description from existing publicly served text. This is an SEO improvement, not a confirmed GSC error.', $safe && self::public_description($post, $html) !== '', 'info');
         } elseif (count($f['descriptions']) > 1 || $f['descriptions'][0] === '') {
-            $out[] = self::issue('description_conflict', 'Empty or multiple meta descriptions. Correct the theme/SEO provider rather than choosing an arbitrary description.', false, 'warning');
+            $out[] = self::issue('description_conflict', 'Empty or multiple meta descriptions. A single empty description can use existing public text; multiple providers require review.', $safe && count($f['descriptions']) === 1 && self::public_description($post, $html) !== '', 'warning');
         }
         $link = wp_remote_retrieve_header($response, 'link');
         $http_canonical = (bool) preg_match('/rel\s*=\s*["\x27]?canonical/i', is_array($link) ? implode(',', $link) : $link);
@@ -167,11 +167,11 @@ class GSCSF_Audit {
         } elseif (count($f['canonicals']) > 1) {
             $out[] = self::issue('canonical_conflict', 'Multiple HTML canonicals. Review the intended canonical in your theme/SEO plugin.', false, 'warning');
         } elseif ($f['canonicals'] && !filter_var($f['canonicals'][0], FILTER_VALIDATE_URL)) {
-            $out[] = self::issue('canonical_relative', 'Canonical is empty or not an absolute URL. Configure an absolute preferred URL.', false, 'warning');
+            $out[] = self::issue('canonical_relative', 'Canonical is empty or relative. A resolvable same-site relative canonical can be made absolute while preserving its chosen destination.', $safe && !$http_canonical && GSCSF_Repairs::canonical($html, $url, $f['canonicals'][0]) !== '', 'warning');
         } elseif ($f['canonicals'] && untrailingslashit($f['canonicals'][0]) !== untrailingslashit($url)) {
             $out[] = self::issue('alternate_canonical', 'Canonical points to ' . $f['canonicals'][0] . '. This can be correct for duplicate content; review before changing.', false, 'info');
         }
-        if (!$f['viewport']) { $out[] = self::issue('viewport', 'No viewport meta tag. Check the responsive theme. This is not the retired Mobile Usability report.', false, 'info'); }
+        if (!$f['viewport']) { $out[] = self::issue('viewport', 'No viewport meta tag. An optional responsive viewport can be added; verify the theme layout after repair. This is not the retired Mobile Usability report.', $safe, 'info'); }
         if (strpos($url, 'https://') === 0 && preg_match('/<(?:img|script|iframe|link)\b[^>]*(?:src|href)\s*=\s*["\x27]http:\/\//i', $html)) {
             $out[] = self::issue('mixed_content', 'HTTP resource references found on an HTTPS page. Update the source asset URLs after checking HTTPS availability.', false, 'warning');
         }
@@ -211,11 +211,16 @@ class GSCSF_Audit {
                 }
             }
         }
+        foreach ($out as &$issue) {
+            if ($issue['fixable'] && !GSCSF_Capabilities::enabled($issue['code'])) { $issue['fixable'] = false; $issue['message'] .= ' Automatic repair is disabled in settings.'; }
+        }
+        unset($issue);
         return array_values(array_reduce($out, function ($all, $issue) { $all[$issue['code']] = $issue; return $all; }, array()));
     }
 
     /** Insert only absent tags. Never rewrite a theme document or override another provider. */
     public static function repair_html($html, $post, $flags) {
+        $flags = array_filter($flags, function ($code) { return GSCSF_Capabilities::enabled($code); }, ARRAY_FILTER_USE_KEY);
         if (!self::eligible($post) || strlen($html) >= self::MAX_BODY || self::head_end($html) === false) { return $html; }
         $f = self::facts($html);
         if (!$f || self::blocked($f['robots'])) { return $html; }
@@ -252,6 +257,7 @@ class GSCSF_Audit {
             $pos = self::head_end($html);
             $html = substr($html, 0, $pos) . "\n<!-- GSC Schema Fix: verified metadata supplements -->\n" . $extra . substr($html, $pos);
         }
-        return GSCSF_Extended::repair($html, $post, $flags);
+        if ($http_canonical) { unset($flags['canonical_relative']); }
+        return GSCSF_Repairs::repair(GSCSF_Extended::repair($html, $post, $flags), $post, $flags);
     }
 }

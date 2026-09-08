@@ -17,6 +17,7 @@ class GSCSF_Plugin {
         add_action('gscsf_tick', array($this, 'cron_tick'));
         add_action('gscsf_daily', array($this, 'daily'));
         add_action('template_redirect', array($this, 'buffer'), 99);
+        add_action('gscsf_purge_url_cache', array($this, 'purge_cache'), 10, 2);
         // Retire the old unbounded/unsafe cron callback on upgrade.
         wp_clear_scheduled_hook('gsc_schema_fix_daily_scan');
     }
@@ -72,6 +73,13 @@ class GSCSF_Plugin {
         wp_clear_scheduled_hook('gsc_schema_fix_daily_scan');
     }
 
+    public function purge_cache($url, $post_id) {
+        if (!GSCSF_Audit::local_url($url)) { return; }
+        // Public provider APIs; other caches can use the existing gscsf_purge_url_cache hook.
+        if (function_exists('rocket_clean_post')) { rocket_clean_post((int) $post_id); }
+        do_action('litespeed_purge_url', $url);
+    }
+
     public function upgrade() {
         if (get_option('gscsf_version') !== GSC_SCHEMA_FIX_VERSION) { self::install(); }
     }
@@ -86,7 +94,7 @@ class GSCSF_Plugin {
     private function settings() { return get_option('gscsf_settings', array()); }
     private function job() { return get_option('gscsf_job', array('phase' => 'idle')); }
     private function save_job($job) { update_option('gscsf_job', $job, false); }
-    private function active($job) { return in_array($job['phase'], array('posts', 'terms', 'scan', 'summarize', 'fixing'), true); }
+    private function active($job) { return in_array($job['phase'], array('detecting', 'posts', 'terms', 'scan', 'summarize', 'fixing'), true); }
 
     /** DB-backed atomic lock: AJAX and cron must never mutate the queue concurrently. */
     private function lock() {
@@ -136,7 +144,8 @@ class GSCSF_Plugin {
         $wpdb->query("DELETE FROM {$this->table}");
         $this->resource_count = 0;
         delete_option('gscsf_resource_limit'); delete_option('gscsf_sitemap_seen');
-        $job = array('phase' => 'posts', 'cursor' => 0, 'term_offset' => 0, 'max_id' => (int) $wpdb->get_var("SELECT MAX(ID) FROM {$wpdb->posts}"), 'started' => current_time('mysql'), 'completed' => '', 'notice' => '');
+        $job = array('phase' => 'detecting', 'cursor' => 0, 'term_offset' => 0, 'max_id' => (int) $wpdb->get_var("SELECT MAX(ID) FROM {$wpdb->posts}"), 'started' => current_time('mysql'), 'completed' => '', 'notice' => '');
+        delete_option('gscsf_profile');
         $this->save_job($job);
         $this->enqueue(home_url('/'), (int) get_option('page_on_front'));
         $posts_page = (int) get_option('page_for_posts');
@@ -184,7 +193,10 @@ class GSCSF_Plugin {
         global $wpdb;
         $job = $this->job();
         if (!$this->active($job)) { return; }
-        if ($job['phase'] === 'posts') {
+        if ($job['phase'] === 'detecting') {
+            GSCSF_Capabilities::detect();
+            $job['phase'] = 'posts';
+        } elseif ($job['phase'] === 'posts') {
             $types = array_values(array_filter(get_post_types(array('public' => true), 'names'), function ($type) { return $type !== 'attachment' && is_post_type_viewable($type); }));
             $ids = array();
             if ($types) {
@@ -229,9 +241,17 @@ class GSCSF_Plugin {
     }
 
     private function scan_row($row) {
+        global $wpdb;
         $settings = $this->settings();
         $response = GSCSF_Audit::fetch($row->url, $row->kind === 'resource' && !empty($settings['external']));
         $code = is_wp_error($response) ? 0 : wp_remote_retrieve_response_code($response);
+        if (!$row->post_id && in_array($row->kind, array('page', 'resource'), true) && GSCSF_Audit::local_url($row->url) && $code === 200 && stripos(wp_remote_retrieve_header($response, 'content-type'), 'text/html') !== false) {
+            $id = url_to_postid($row->url);
+            if ($id && GSCSF_Audit::eligible(get_post($id)) && untrailingslashit(get_permalink($id)) === untrailingslashit($row->url)) {
+                $row->post_id = $id; $row->kind = 'page';
+                $wpdb->update($this->table, array('post_id' => $id, 'kind' => 'page'), array('id' => $row->id));
+            }
+        }
         $redirect = '';
         if ($code >= 300 && $code < 400) {
             $redirect = GSCSF_Extended::resolve(wp_remote_retrieve_header($response, 'location'), $row->url);
@@ -351,6 +371,7 @@ class GSCSF_Plugin {
         $before = is_array($before) ? $before : array();
         $after = $before;
         foreach ($codes as $code) { $after[$code] = true; }
+        foreach ($fresh as $issue) { if (in_array($issue['code'], $codes, true) && isset($issue['replacement'])) { $after[$issue['code']] = $issue['replacement']; } }
         update_post_meta($post->ID, '_gscsf_repairs', $after);
         clean_post_cache($post->ID);
         do_action('gscsf_purge_url_cache', $row->url, $post->ID);
@@ -361,7 +382,7 @@ class GSCSF_Plugin {
         $fixed = $unverifiable ? array() : array_values(array_diff($codes, $remaining));
         // Keep only verified additions. Failed attempts cannot silently leave an active repair behind.
         $final = $before;
-        foreach ($fixed as $code) { $final[$code] = true; }
+        foreach ($fixed as $code) { $final[$code] = $after[$code]; }
         if ($final) { update_post_meta($post->ID, '_gscsf_repairs', $final); }
         else { delete_post_meta($post->ID, '_gscsf_repairs'); }
         clean_post_cache($post->ID);
@@ -379,7 +400,8 @@ class GSCSF_Plugin {
         if (count($fixed) < count($codes)) {
             $verified[] = GSCSF_Audit::issue('fix_unverified', 'Some repairs could not be verified and were rolled back. Check page/CDN caches, theme output and loopback access, then rescan.', false, 'warning');
         }
-        $this->store_row($row, array_merge($verified, $google), array('fix_state' => $fixed ? 'verified' : 'failed', 'fixed' => count($fixed), 'fixable' => 0));
+        // A repaired response can reveal another bounded candidate. Keep it visible for the next pass.
+        $this->store_row($row, array_merge($verified, $google), array('fix_state' => $fixed ? 'verified' : 'failed', 'fixed' => (int) $row->fixed + count($fixed)));
     }
 
     private function undo($id) {
@@ -421,9 +443,15 @@ class GSCSF_Plugin {
         try {
             if ($verb === 'start') { $this->start(); }
             elseif ($verb === 'tick') { $this->step(); }
+            elseif ($verb === 'detect') {
+                if ($this->active($this->job())) { throw new RuntimeException('Finish or cancel the current operation first.'); }
+                GSCSF_Capabilities::detect();
+            }
             elseif ($verb === 'fix') {
                 $job = $this->job();
                 if ($job['phase'] !== 'complete') { throw new RuntimeException('Complete the entire scan before using Auto Fix.'); }
+                global $wpdb;
+                $wpdb->query("UPDATE {$this->table} SET fix_state = '' WHERE fixable > 0");
                 $job['phase'] = 'fixing'; $job['notice'] = ''; $this->save_job($job); $this->schedule();
             } elseif ($verb === 'cancel') {
                 $job = $this->job(); $job['phase'] = 'cancelled'; $job['notice'] = 'Operation cancelled. Existing verified repairs remain active.'; $this->save_job($job); wp_clear_scheduled_hook('gscsf_tick');
@@ -450,6 +478,8 @@ class GSCSF_Plugin {
     private function save_settings() {
         if ($this->active($this->job())) { throw new RuntimeException('Finish or cancel the current operation before changing settings.'); }
         $settings = array('daily' => !empty($_POST['daily']) ? 1 : 0, 'auto' => !empty($_POST['auto']) ? 1 : 0, 'google' => !empty($_POST['google']) ? 1 : 0, 'external' => !empty($_POST['external']) ? 1 : 0);
+        $settings['repairs'] = array();
+        foreach (GSCSF_Capabilities::groups() as $key => $label) { $settings['repairs'][$key] = !empty($_POST['repair_' . $key]) ? 1 : 0; }
         $settings['property'] = trim(sanitize_text_field(wp_unslash($_POST['property'] ?? '')));
         if ($settings['google'] && (!GSCSF_Google::configured() || $settings['property'] === '')) { throw new RuntimeException('Configure a service account and enter the exact Search Console property before enabling Google inspection.'); }
         foreach (array('sitemaps', 'extra_urls') as $field) {
@@ -472,7 +502,7 @@ class GSCSF_Plugin {
         $logs = $wpdb->get_results("SELECT id,url,codes,state,created_at FROM {$this->log} ORDER BY id DESC LIMIT 20", ARRAY_A);
         $import = get_option('gscsf_ahrefs', array());
         $import['url_count'] = count($import['urls'] ?? array()); unset($import['urls']);
-        return array('job' => $this->job(), 'counts' => array_map('intval', $counts ?: array()), 'rows' => $rows, 'page' => $page, 'report_rows' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$this->table} WHERE issue_count > 0"), 'logs' => $logs, 'import' => $import, 'resource_limit' => (bool) get_option('gscsf_resource_limit'));
+        return array('profile' => get_option('gscsf_profile', null), 'coverage' => GSCSF_Capabilities::coverage(!empty($this->settings()['google'])), 'job' => $this->job(), 'counts' => array_map('intval', $counts ?: array()), 'rows' => $rows, 'page' => $page, 'report_rows' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$this->table} WHERE issue_count > 0"), 'logs' => $logs, 'import' => $import, 'resource_limit' => (bool) get_option('gscsf_resource_limit'));
     }
 
     public function menu() { add_options_page('GSC Schema Fix', 'GSC Schema Fix', 'manage_options', 'gsc-schema-fix', array($this, 'page')); }
@@ -491,7 +521,13 @@ class GSCSF_Plugin {
             <h1>GSC Schema Fix <small><?php echo esc_html(GSC_SCHEMA_FIX_VERSION); ?></small></h1>
             <p>Website diagnostics for blogs, business sites, portfolios, publications, shops and public custom content.</p>
             <div class="gscsf-card">
-                <h2>Scan your website</h2>
+                <h2>1. Identify your website</h2>
+                <p>Every scan first checks the installed commerce and SEO software and inventories public content types. General checks run on all sites; product findings apply where product markup exists.</p>
+                <button type="button" class="button" id="gscsf-detect">Detect Website Type</button>
+                <div id="gscsf-profile" role="status" aria-live="polite"></div>
+            </div>
+            <div class="gscsf-card">
+                <h2>2. Scan your website</h2>
                 <p>Checks published public content, homepage, archives and same-site sitemap URLs. Add old or missing URLs from Search Console below. Scans use server HTML, not JavaScript rendering. Findings include SEO suggestions and intentional exclusions, not only errors.</p>
                 <p><button type="button" class="button button-primary" id="gscsf-start">Scan Website</button>
                 <button type="button" class="button" id="gscsf-resume" hidden>Resume</button>
@@ -502,9 +538,11 @@ class GSCSF_Plugin {
                 <div id="gscsf-message" role="status" aria-live="polite"></div>
             </div>
             <div class="gscsf-card">
-                <h2>Scan results</h2>
-                <p>Auto Fix supplements missing metadata and restores absent image alt attributes from existing Media Library descriptions. Every repair is rechecked over HTTP. Explicit empty alt, intentional noindex, redirects and business facts are preserved.</p>
+                <h2>3. Review and repair</h2>
+                <p>Auto Fix applies enabled repairs to eligible public content, then verifies the result over HTTP. It can supplement metadata, fill a single empty description, normalize a relative canonical, restore image information, and update verified permanent internal redirect links. Review the repair controls below.</p>
+                <p>Counts are findings across all scanned URLs, not a four-issue limit. Remaining candidates can be processed with another Auto Fix pass. General SEO suggestions are separate from Google indexing errors. Failed verification leaves the finding available for review or retry.</p>
                 <button type="button" class="button button-primary" id="gscsf-fix" hidden>Auto Fix Solvable Issues</button>
+                <p><label for="gscsf-filter">Show findings</label> <select id="gscsf-filter"><option value="all">All findings</option><option value="fixable">Automatic repair candidates</option><option value="review">Needs review</option><option value="error">Errors</option></select> <span class="description">Filter applies to the current 50-URL page.</span></p>
                 <div id="gscsf-results"></div>
                 <p><button type="button" class="button" id="gscsf-prev" hidden>Previous 50</button> <button type="button" class="button" id="gscsf-next" hidden>Next 50</button></p>
             </div>
@@ -526,6 +564,12 @@ class GSCSF_Plugin {
             <div class="gscsf-card">
                 <h2>Scan settings</h2>
                 <form id="gscsf-settings">
+                    <h3>Automatic repair controls</h3>
+                    <p>Choose repair groups, then save and rescan. Switching a group off also pauses its existing output repairs; clear page/CDN caches to refresh previously cached output. Each successful repair is verified over HTTP and can be undone.</p>
+                    <p>Internal-link repair probes up to two unique unresolved same-site anchors per page. Only a direct 301/308 redirect to HTTP 200 HTML qualifies; temporary, external, query-bearing and broken targets need review. Existing redirect rules remain unchanged.</p>
+                    <?php foreach (GSCSF_Capabilities::groups() as $key => $label) : ?>
+                    <p><label class="gscsf-toggle"><input type="checkbox" role="switch" name="repair_<?php echo esc_attr($key); ?>" value="1" <?php checked(!isset($s['repairs']) || !empty($s['repairs'][$key])); ?>><span><?php echo esc_html($label); ?></span></label></p>
+                    <?php endforeach; ?>
                     <p><label><input type="checkbox" name="daily" value="1" <?php checked(!empty($s['daily'])); ?>> Run daily scans with WordPress cron</label></p>
                     <p><label><input type="checkbox" name="auto" value="1" <?php checked(!empty($s['auto'])); ?>> Automatically apply verified safe repairs after a completed scan</label></p>
                     <p><label><input type="checkbox" name="external" value="1" <?php checked(!empty($s['external'])); ?>> Also fetch external link/image/CSS/script destinations found in public pages</label></p>
@@ -544,6 +588,10 @@ class GSCSF_Plugin {
                     <p>Google results are indexed snapshots, cached for 24 hours. A local budget of 1,900 new inspections per rolling 24 hours leaves room below Google's 2,000-per-property daily quota. Other tools share that quota. Deferred inspections are shown explicitly.</p>
                     <button type="submit" class="button">Save Settings</button>
                 </form>
+            </div>
+            <div class="gscsf-card">
+                <h2>Scan coverage</h2>
+                <div id="gscsf-coverage"></div>
             </div>
             <div class="gscsf-card">
                 <h2>What needs review outside this plugin</h2>

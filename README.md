@@ -1,11 +1,13 @@
-# GSC Schema Fix 5.1.0
+# GSC Schema Fix 5.2.0
 
 A rebuilt WordPress website audit and reversible metadata repair plugin. Requires WordPress 6.2+, PHP 7.4+, DOM and SimpleXML. PHP OpenSSL is required only for the optional Google connection.
+
+**Version 5.2:** website-type detection before every scan, six repair toggles, expanded automatic repairs, retryable remaining candidates, cache-provider integration and clearer coverage reporting. See [AUTO-FIX.md](AUTO-FIX.md) for the complete current repair matrix and limits.
 
 ## Install or upgrade
 
 1. Back up the site and test this major upgrade on staging.
-2. Upload `gscerrorfix-main-5.1.0.zip` in **Plugins → Add New → Upload Plugin**. Replace the existing plugin when WordPress offers that option. The plugin folder and main filename match the supplied archive.
+2. Upload `gscerrorfix-main-5.2.0.zip` in **Plugins → Add New → Upload Plugin**. Replace the existing plugin when WordPress offers that option. The plugin folder and main filename match the supplied archive.
 3. Activate it and open **Settings → GSC Schema Fix**.
 4. Click **Scan Website**. Leave the page open for faster processing. You can return and click **Resume**; WordPress cron also processes saved work.
 5. Once discovery and scanning finish, click **Auto Fix Solvable Issues**. The button shows the number of repair candidates and is disabled if none qualify. Review remaining findings and the verified repair history.
@@ -31,10 +33,11 @@ This is not a comprehensive crawler of every link or infinite URL variation. Aut
 | Missing structured data on general content | Add a factual `WebPage` object only when no JSON-LD, microdata or RDFa exists |
 | HTTP errors, redirects, network/TLS failures | Report status and review guidance; no arbitrary redirects |
 | Meta/X-Robots noindex and global search visibility | Report and preserve intent |
-| Duplicate/empty metadata and alternate/invalid canonicals | Report for source-provider review |
+| Single empty description and relative same-site canonical | Repair when unambiguous; conflicting providers and alternate absolute canonicals require review |
 | Invalid JSON-LD and baseline rich-result fields | Report for factual source-data correction; not full schema validation |
 | Sitemap availability, XML validity, robots.txt root rules | Report; discover same-site sitemap URLs |
-| Missing viewport or HTTP resource references on HTTPS | Report theme/content concerns |
+| Missing viewport/language | Optional supplements using site configuration |
+| HTTP resource references on HTTPS | Report for resource availability review |
 | Retired schema rich-result features | Explain retirement; do not invent replacements |
 | Google indexed status and rich-result issues | Optional read-only URL Inspection; separate from local findings |
 
@@ -42,7 +45,7 @@ Missing descriptions, canonicals, images or generic schema are often **SEO sugge
 
 ## Repairs, verification and undo
 
-Repairs are small per-post flags. They supplement anonymous public HTML only when the corresponding tags or supported image alt attributes are absent. Missing image alt can use existing Media Library text after matching the actual image URL; explicit empty alt remains untouched. Stored text, titles and images must also occur in the anonymous response before being used, to avoid exposing content hidden by membership/paywall providers. They do not edit page content, post titles, excerpts, database URLs, commerce facts, robots rules or third-party metadata. HTML bodies are not reserialized. Private/noindex pages and pagination are excluded from repair.
+Repairs are small per-post flags. They supplement missing anonymous public HTML information and repair selected empty/relative metadata and verified permanent redirect anchors. Missing image alt can use existing Media Library text after matching the actual image URL; explicit empty alt remains untouched. Stored text, titles and images must also occur in the anonymous response before being used, to avoid exposing content hidden by membership/paywall providers. They do not edit page content, post titles, excerpts, database URLs, commerce facts, robots rules or populated third-party metadata. HTML bodies are not reserialized. Private/noindex pages and pagination are excluded from repair.
 
 Auto Fix rechecks the current URL before changing flags and fetches it again afterward. Only findings confirmed absent in a successful HTML response count as fixed. Unverified additions are rolled back. A failed verification may be caused by a page cache, CDN, disabled loopback access or an unusual theme; its report says so. A Google indexed snapshot is never marked repaired just because a local fix succeeded.
 

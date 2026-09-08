@@ -10,4 +10,15 @@
 .gscsf #gscsf-message:not(:empty) { padding: 12px; border-left: 4px solid #2271b1; background: #f0f6fc; }
 .gscsf [hidden] { display: none !important; }
 .gscsf #gscsf-history { overflow-wrap: anywhere; }
+.gscsf-toggle { display: inline-flex; align-items: center; gap: 12px; cursor: pointer; }
+.gscsf input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 42px; height: 24px; border-radius: 20px; background: #787c82; border: 2px solid #787c82; position: relative; vertical-align: middle; flex-shrink: 0; transition: background .15s; }
+.gscsf input[type="checkbox"]::before { content: ''; display: block; position: absolute; width: 16px; height: 16px; border-radius: 50%; background: white; left: 2px; top: 2px; margin: 0; }
+.gscsf input[type="checkbox"]:checked { background: #2271b1; border-color: #2271b1; }
+.gscsf input[type="checkbox"]:checked::before { left: 20px; }
+.gscsf input[type="checkbox"]:focus-visible { outline: 2px solid #135e96; outline-offset: 3px; }
+.gscsf input[type="checkbox"]:disabled { opacity: .55; cursor: default; }
+.gscsf #gscsf-profile h3 { color: #135e96; }
+.gscsf #gscsf-coverage { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 8px 24px; }
+.gscsf #gscsf-coverage h3, .gscsf #gscsf-coverage p { margin: 8px 0; }
+@media (max-width: 600px) { .gscsf #gscsf-coverage { display: block; } }
 @media (max-width: 600px) { .gscsf-card { padding: 16px; } .gscsf .button { margin-bottom: 8px; } }

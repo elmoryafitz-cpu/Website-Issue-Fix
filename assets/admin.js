@@ -1,7 +1,7 @@
 jQuery(function ($) {
     'use strict';
     var running = false, busy = false, page = 0, timer = null, latest = null;
-    var active = ['posts', 'terms', 'scan', 'summarize', 'fixing'];
+    var active = ['detecting', 'posts', 'terms', 'scan', 'summarize', 'fixing'];
     function message(text) { $('#gscsf-message').text(text || ''); }
     function request(verb, extra) {
         if (extra instanceof FormData) {
@@ -24,8 +24,22 @@ jQuery(function ($) {
     function render(data) {
         latest = data;
         var c = data.counts, phase = data.job.phase, isActive = active.indexOf(phase) !== -1;
+        var profile = $('#gscsf-profile').empty();
+        if (data.profile) {
+            $('<h3>').text(data.profile.type).appendTo(profile);
+            $('<p>').text('Detected: ' + data.profile.detected_at + ' | ' + (data.profile.public ? 'Search engine visibility enabled' : 'WordPress discourages indexing')).appendTo(profile);
+            $('<p>').text('Commerce: ' + (data.profile.commerce.join(', ') || 'No supported commerce software detected') + ' | SEO providers: ' + (data.profile.seo.join(', ') || 'None detected')).appendTo(profile);
+            $('<p>').text(data.profile.content_types.map(function (type) { return type.label + ': ' + type.published; }).join(' | ')).appendTo(profile);
+        } else { $('<p>').text('Website type will be detected before issue scanning starts.').appendTo(profile); }
+        $('#gscsf-detect').prop('disabled', isActive || busy);
+        var coverage = $('#gscsf-coverage').empty();
+        (data.coverage || []).forEach(function (item) {
+            $('<h3>').text(item.name + ' — ' + item.status).appendTo(coverage);
+            $('<p>').text(item.detail).appendTo(coverage);
+        });
         var labels = {idle: 'Ready to scan.', posts: 'Discovering published content…', terms: 'Discovering taxonomy archives…', scan: 'Scanning URLs…', fixing: 'Applying and verifying repairs…', complete: 'Scan completed. Review findings below.', cancelled: 'Operation cancelled; coverage is incomplete.', paused: 'Operation paused after an error. Review the message, then cancel and start a new scan.'};
         $('#gscsf-status').text((labels[phase] || phase) + (data.job.started ? ' Started: ' + data.job.started : ''));
+        if (phase === 'detecting') { $('#gscsf-status').text('Identifying website type, commerce software and public content…'); }
         if (phase === 'summarize') { $('#gscsf-status').text('Checking redirect chains, sitemap membership and observed references…'); }
         $('#gscsf-progress').val(c.total ? Math.round(c.done / c.total * 100) : 0);
         $('#gscsf-counts').text(c.done + ' / ' + c.total + ' discovered URLs checked · ' + c.findings + ' findings (including information) · ' + c.fixable + ' automatic repair candidates · ' + c.fixed + ' verified fixes in this run');
@@ -49,6 +63,11 @@ jQuery(function ($) {
             $('<p>').text(phase === 'complete' ? 'No findings from the checks performed. This does not certify Google indexing or every possible website issue.' : 'Results appear as URLs are checked.').appendTo(results);
         }
         data.rows.forEach(function (row) {
+            var filter = $('#gscsf-filter').val();
+            var issues = row.issues.filter(function (issue) {
+                return filter === 'all' || (filter === 'fixable' && issue.fixable) || (filter === 'review' && !issue.fixable) || (filter === 'error' && issue.severity === 'error');
+            });
+            if (!issues.length) { return; }
             var article = $('<article>', {'class': 'gscsf-result'}).appendTo(results);
             $('<h3>').append(link(row.url)).appendTo(article);
             $('<p>', {'class': 'description'}).text(row.kind + ' · Checked: ' + row.checked_at + (row.fix_state ? ' · Repair: ' + row.fix_state : '')).appendTo(article);
@@ -57,19 +76,23 @@ jQuery(function ($) {
                 row.refs.forEach(function (url) { refs.append(link(url)).append(document.createTextNode(' ')); });
             }
             var list = $('<ul>').appendTo(article);
-            row.issues.forEach(function (issue) {
+            issues.forEach(function (issue) {
                 var item = $('<li>').appendTo(list);
                 $('<strong>').text('[' + issue.source + ' / ' + issue.severity + '] ' + (issue.fixable ? 'Auto-fixable: ' : 'Review: ')).appendTo(item);
                 $('<span>').text(issue.message).appendTo(item);
             });
         });
         page = data.page;
+        if (data.rows.length && !results.children().length) { $('<p>').text('No matching findings on this report page.').appendTo(results); }
         $('#gscsf-prev').prop('hidden', page === 0).prop('disabled', busy);
         $('#gscsf-next').prop('hidden', (page + 1) * 50 >= data.report_rows).prop('disabled', busy);
         var history = $('#gscsf-history').empty();
         if (!data.logs.length) { $('<p>').text('No verified repairs yet.').appendTo(history); }
         data.logs.forEach(function (entry) {
             var row = $('<p>').append(link(entry.url)).appendTo(history);
+            var repaired = [];
+            try { repaired = JSON.parse(entry.codes); } catch (ignore) { /* Older log entry. */ }
+            $('<span>').text(' | ' + repaired.join(', ')).appendTo(row);
             $('<span>').text(' · ' + entry.created_at + ' · ' + entry.state + ' ').appendTo(row);
             if (entry.state === 'verified') {
                 $('<button>', {type: 'button', 'class': 'button'}).text('Undo').prop('disabled', isActive || busy).on('click', function () { perform('undo', {id: entry.id}); }).appendTo(row);
@@ -114,6 +137,8 @@ jQuery(function ($) {
         });
     }
     $('#gscsf-start').on('click', function () { page = 0; perform('start'); });
+    $('#gscsf-detect').on('click', function () { perform('detect'); });
+    $('#gscsf-filter').on('change', function () { if (latest) { render(latest); } });
     $('#gscsf-fix').on('click', function () { page = 0; perform('fix'); });
     $('#gscsf-cancel').on('click', function () { running = false; perform('cancel'); });
     $('#gscsf-resume').on('click', function () { running = true; pump(); });
