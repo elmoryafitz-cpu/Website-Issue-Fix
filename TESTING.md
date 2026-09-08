@@ -1,6 +1,14 @@
-# Validation report — 5.2.0
+# Validation report — 5.3.0
 
 Tested 8 September 2026 in an isolated WordPress 7.1 installation, PHP 8.3.33, and the WordPress Performance Team's SQLite Database Integration. The runtime, database and test-only fixtures are outside the release ZIP. No live customer website or Google account was modified.
+
+## Version 5.3 validation
+
+- Existing 40 integration, 23 Ahrefs and 25 repair regression assertions pass.
+- Added 21 workflow assertions: activation/deactivation pauses, saved-report preservation, stale cron protection, in-flight worker interruption, explicit scheduling, per-run repair consent, automatic sitemap/old-slug discovery, false-error avoidance, scan cache isolation, fresh repair evidence and batch completion.
+- A six-row fast-response fixture completes six URLs in one batch rather than one URL per request. A 100-call shared-redirect fixture requires two mocked HTTP requests rather than 200; a fresh repair check bypasses that cache. These are deterministic work/request-count tests, not a live-site speed guarantee.
+- Authenticated HTTP checks cover the one-click action, nonce enforcement and collapsed optional import controls.
+- The same browser, hosting, PHP-version and third-party compatibility limits below still apply.
 
 ## Version 5.2 validation
 

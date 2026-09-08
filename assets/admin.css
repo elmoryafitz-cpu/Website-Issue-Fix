@@ -18,6 +18,11 @@
 .gscsf input[type="checkbox"]:focus-visible { outline: 2px solid #135e96; outline-offset: 3px; }
 .gscsf input[type="checkbox"]:disabled { opacity: .55; cursor: default; }
 .gscsf #gscsf-profile h3 { color: #135e96; }
+.gscsf summary { cursor: pointer; font-size: 16px; font-weight: 600; line-height: 1.5; }
+.gscsf summary:focus-visible { outline: 2px solid #2271b1; outline-offset: 4px; }
+.gscsf details[open] > summary { margin-bottom: 16px; }
+.gscsf-advanced { padding: 20px 24px; border: 1px solid #dcdcde; border-radius: 6px; margin: 18px 0; }
+.gscsf #gscsf-start-fix { margin-right: 12px; }
 .gscsf #gscsf-coverage { display: grid; grid-template-columns: minmax(200px, 1fr) 2fr; gap: 8px 24px; }
 .gscsf #gscsf-coverage h3, .gscsf #gscsf-coverage p { margin: 8px 0; }
 @media (max-width: 600px) { .gscsf #gscsf-coverage { display: block; } }

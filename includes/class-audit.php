@@ -5,6 +5,11 @@ if (!defined('ABSPATH')) { exit; }
 class GSCSF_Audit {
     const MAX_BODY = 4194304;
 
+    public static function robots_url() {
+        $parts = wp_parse_url(home_url('/'));
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '') . '/robots.txt';
+    }
+
     public static function issue($code, $message, $fixable = false, $severity = 'warning', $source = 'local') {
         return compact('code', 'message', 'fixable', 'severity', 'source');
     }
@@ -22,7 +27,7 @@ class GSCSF_Audit {
     }
 
     public static function fetch($url, $external = false) {
-        if (!self::local_url($url) && !$external) { return new WP_Error('scope', 'URL is outside this WordPress site.'); }
+        if (!self::local_url($url) && $url !== self::robots_url() && !$external) { return new WP_Error('scope', 'URL is outside this WordPress site.'); }
         $parts = wp_parse_url($url);
         if (!$parts || isset($parts['user']) || isset($parts['pass']) || !in_array(strtolower($parts['scheme'] ?? ''), array('http', 'https'), true)) { return new WP_Error('scope', 'Unsupported URL.'); }
         // No cookies, credentials, arbitrary hosts, insecure TLS, or automatic redirects.
@@ -57,6 +62,9 @@ class GSCSF_Audit {
     }
 
     public static function facts($html) {
+        static $last_key = null, $last_facts = null;
+        $key = hash('sha256', $html);
+        if ($key === $last_key) { return $last_facts; }
         $dom = self::document($html);
         if (!$dom) { return false; }
         $x = new DOMXPath($dom);
@@ -80,6 +88,7 @@ class GSCSF_Audit {
             if (strtolower(trim($node->getAttribute('type'))) === 'application/ld+json') { $facts['json'][] = trim($node->textContent); }
         }
         $facts['other_schema'] = $x->query('//*[@itemscope or @typeof]')->length > 0;
+        $last_key = $key; $last_facts = $facts;
         return $facts;
     }
 
@@ -93,13 +102,18 @@ class GSCSF_Audit {
     }
 
     public static function public_text($html) {
+        static $last_key = null, $last_text = '';
+        $key = hash('sha256', $html);
+        if ($key === $last_key) { return $last_text; }
         $dom = self::document($html);
         if (!$dom) { return ''; }
         $x = new DOMXPath($dom);
         foreach ($x->query('//script | //style | //template | //noscript | //*[@hidden or @aria-hidden="true"]') as $node) {
             if ($node->parentNode) { $node->parentNode->removeChild($node); }
         }
-        return trim(preg_replace('/\s+/u', ' ', $dom->textContent));
+        $last_key = $key;
+        $last_text = trim(preg_replace('/\s+/u', ' ', $dom->textContent));
+        return $last_text;
     }
 
     public static function public_description($post, $html) {
@@ -125,7 +139,7 @@ class GSCSF_Audit {
         foreach ($value as $child) { if (is_array($child)) { self::schema_nodes($child, $nodes, $depth + 1); } }
     }
 
-    public static function analyze($url, $response, $post = null) {
+    public static function analyze($url, $response, $post = null, $fresh = true) {
         $out = array();
         if (is_wp_error($response)) {
             return array(self::issue('fetch_failed', 'Could not fetch this URL. Check DNS, TLS, firewall and loopback access; this does not prove Googlebot is blocked.', false, 'error'));
@@ -149,7 +163,7 @@ class GSCSF_Audit {
         $blocked = self::blocked($directives);
         if ($blocked) { $out[] = self::issue('noindex', 'A noindex/none directive is present. Review intent in WordPress, your SEO plugin or server configuration; it is preserved.', false, 'info'); }
         $safe = self::eligible($post) && !$blocked && untrailingslashit($url) === untrailingslashit(get_permalink($post));
-        $out = array_merge($out, GSCSF_Extended::analyze($url, $html, $post, $safe), GSCSF_Repairs::analyze($html, $url, $post, $safe));
+        $out = array_merge($out, GSCSF_Extended::analyze($url, $html, $post, $safe), GSCSF_Repairs::analyze($html, $url, $post, $safe, $fresh));
         if (($response['gscsf_elapsed_ms'] ?? 0) > 3000) { $out[] = self::issue('slow_fetch', 'Full HTTP fetch exceeded 3 seconds. This single server-side measurement is not TTFB, browser load time or Core Web Vitals; review hosting and caching.', false, 'info'); }
         $public_title = $safe && trim($post->post_title) !== '' && strpos(self::public_text($html), wp_strip_all_tags($post->post_title)) !== false;
         if (!$f['titles'] || $f['titles'][0] === '') {

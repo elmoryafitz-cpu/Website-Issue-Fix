@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.3.0 — 2026-09-08
+
+- Pause previous work on activation, deactivation and upgrade; retain reports as saved and preserve verified repair flags/history. Require explicit re-enabling of daily automation.
+- Add one-click Scan & Auto Fix and explicit Scan Only, with per-run repair consent.
+- Automatically discover common sitemap locations, robots.txt-declared sitemaps and known WordPress old slugs. Distinguish guessed sitemap locations from declared/configured failures.
+- Move optional Ahrefs imports, manual overrides and scheduling under collapsed advanced options.
+- Process up to six sequential units per worker request with a four-second between-unit budget and 150 ms browser pacing.
+- Reuse scan-scoped redirect probes, cache repeated HTML facts/text within a request, avoid redundant queue inserts/updates and reduce duplicate UI rendering. Fresh repair verification is preserved.
+- Add 21 activation, scheduling, discovery and performance regression checks.
+
 ## 5.2.0 — 2026-09-08
 
 - Detect website type and public-content/commerce/SEO evidence before every scan.

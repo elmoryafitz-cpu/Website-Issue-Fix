@@ -1,16 +1,26 @@
-# GSC Schema Fix 5.2.0
+# GSC Schema Fix 5.3.0
 
 A rebuilt WordPress website audit and reversible metadata repair plugin. Requires WordPress 6.2+, PHP 7.4+, DOM and SimpleXML. PHP OpenSSL is required only for the optional Google connection.
 
 **Version 5.2:** website-type detection before every scan, six repair toggles, expanded automatic repairs, retryable remaining candidates, cache-provider integration and clearer coverage reporting. See [AUTO-FIX.md](AUTO-FIX.md) for the complete current repair matrix and limits.
 
+## Simple operation in 5.3
+
+Activation or upgrade never starts a scan. Previous reports are labelled as saved, pending work is paused, and daily/automatic scheduling is switched off until explicitly enabled again. Existing verified repair flags and undo history are preserved.
+
+Click **Scan & Auto Fix** for one automatic discovery → scan → supported repair → verification run. Click **Scan Only** to inspect without applying repairs. No Ahrefs upload, sitemap entry or additional URL entry is required. Advanced options are collapsed by default.
+
+Discovery uses public WordPress content and archives, known old WordPress slugs, internal links, robots.txt sitemap declarations and common sitemap locations. A missing guessed sitemap location is not reported as a broken configured sitemap. Old URLs with no trace in any source still need optional historical evidence.
+
+Workers handle up to six sequential units per request, stopping between units after a four-second work budget; an in-flight request can exceed that budget. The browser waits 150 ms between batches instead of 1.2 seconds per URL. Shared redirect probes are cached for the current scan, while repair preflight and verification remain fresh. Performance depends on hosting and HTTP latency; no fixed speed multiplier is promised.
+
 ## Install or upgrade
 
 1. Back up the site and test this major upgrade on staging.
-2. Upload `gscerrorfix-main-5.2.0.zip` in **Plugins → Add New → Upload Plugin**. Replace the existing plugin when WordPress offers that option. The plugin folder and main filename match the supplied archive.
+2. Upload `gscerrorfix-main-5.3.0.zip` in **Plugins → Add New → Upload Plugin**. Replace the existing plugin when WordPress offers that option. The plugin folder and main filename match the supplied archive.
 3. Activate it and open **Settings → GSC Schema Fix**.
-4. Click **Scan Website**. Leave the page open for faster processing. You can return and click **Resume**; WordPress cron also processes saved work.
-5. Once discovery and scanning finish, click **Auto Fix Solvable Issues**. The button shows the number of repair candidates and is disabled if none qualify. Review remaining findings and the verified repair history.
+4. Click **Scan & Auto Fix** for the complete workflow, or **Scan Only** to inspect first. Leave the page open for faster processing. You can return and click **Resume**; WordPress cron also processes saved work.
+5. If you chose Scan Only, once discovery and scanning finish click **Auto Fix Solvable Issues**. The button shows the number of repair candidates and is disabled if none qualify. Review remaining findings and the verified repair history.
 
 **Ahrefs support:** import a ZIP/CSV/TSV in the dashboard, then run a fresh scan. Version 5.1 adds link/asset status checks, redirect-chain diagnostics, headings, editorial metadata guidelines, Open Graph supplements and restoration of existing image alt text. See [AHREFS.md](AHREFS.md) for coverage, limits and external-check privacy.
 

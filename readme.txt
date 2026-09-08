@@ -3,13 +3,14 @@ Contributors: dratzymarcano
 Tags: search-console, seo, schema, wordpress, audit
 Requires at least: 6.2
 Requires PHP: 7.4
-Stable tag: 5.2.0
+Stable tag: 5.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 WordPress website diagnostics with optional Google URL Inspection and verified, reversible metadata repairs.
 
 == Description ==
+Version 5.3 adds one-click Scan & Auto Fix, automatic sitemap and known old-URL discovery, faster bounded workers and scan-specific probe reuse. Activation pauses previous work and labels saved reports; no upload or manual URL entry is required.
 Version 5.2 adds website-type detection, six repair-group toggles, expanded verified repairs, cache hooks and transparent scan coverage. See AUTO-FIX.md.
 Now includes Ahrefs ZIP/CSV import, heading and metadata diagnostics, linked-asset status checks, redirect-chain summaries, Open Graph supplements and safe restoration of saved image alt text. See AHREFS.md.
 Scans public posts, pages, custom types, archives and same-site sitemap URLs. After a complete scan, use Auto Fix Solvable Issues to apply metadata additions derived from existing content. No indexing or ranking guarantee. See README.md for complete setup, coverage and migration notes.
@@ -22,6 +23,8 @@ Optional external link/asset checking requests public destination URLs found in 
 Optional Google Search Console inspection sends scanned page URLs and your property identifier to Google when enabled. Authentication uses oauth2.googleapis.com; inspection uses searchconsole.googleapis.com. It uses a server-configured service-account key and read-only scope. See https://policies.google.com/privacy and https://developers.google.com/terms for Google's policies. Local scans work without this service.
 
 == Changelog ==
+= 5.3.0 =
+No surprise scans on activation; one-click workflow, automatic discovery, collapsed advanced options and faster bounded scanning.
 = 5.2.0 =
 Website detection, expanded repair families, toggles, report filters, retryable candidates and cache-provider integration.
 = 5.1.0 =

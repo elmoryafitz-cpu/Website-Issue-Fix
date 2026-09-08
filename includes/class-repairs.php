@@ -3,17 +3,27 @@ if (!defined('ABSPATH')) { exit; }
 
 /** Additional reversible HTML repairs; no database content rewriting or invented facts. */
 class GSCSF_Repairs {
-    public static function redirect_target($url) {
+    public static function redirect_target($url, $fresh = true) {
         if (!GSCSF_Audit::local_url($url) || wp_parse_url($url, PHP_URL_QUERY) || GSCSF_Extended::utility($url)) { return ''; }
+        $run = get_option('gscsf_job', array())['run_id'] ?? '';
+        $key = 'gscsf_redirect_' . md5($run . '|' . $url);
+        if (!$fresh && $run) {
+            $cached = get_transient($key);
+            if (is_array($cached)) { return $cached['target']; }
+        }
+        $remember = function ($target) use ($key, $fresh, $run) {
+            if (!$fresh && $run) { set_transient($key, array('target' => $target), HOUR_IN_SECONDS); }
+            return $target;
+        };
         $args = array('timeout' => 2, 'redirection' => 0, 'limit_response_size' => 65536, 'user-agent' => 'GSC-Schema-Fix/' . GSC_SCHEMA_FIX_VERSION);
         $response = wp_safe_remote_get($url, $args);
-        if (is_wp_error($response) || !in_array(wp_remote_retrieve_response_code($response), array(301, 308), true)) { return ''; }
+        if (is_wp_error($response) || !in_array(wp_remote_retrieve_response_code($response), array(301, 308), true)) { return $remember(''); }
         $raw = wp_remote_retrieve_header($response, 'location');
-        if (!is_string($raw) || strpos($raw, '#') !== false) { return ''; }
+        if (!is_string($raw) || strpos($raw, '#') !== false) { return $remember(''); }
         $target = GSCSF_Extended::resolve($raw, $url);
-        if (!$target || $target === $url || !GSCSF_Audit::local_url($target) || wp_parse_url($target, PHP_URL_QUERY) || GSCSF_Extended::utility($target)) { return ''; }
+        if (!$target || $target === $url || !GSCSF_Audit::local_url($target) || wp_parse_url($target, PHP_URL_QUERY) || GSCSF_Extended::utility($target)) { return $remember(''); }
         $final = wp_safe_remote_get($target, $args);
-        return !is_wp_error($final) && wp_remote_retrieve_response_code($final) === 200 && stripos(wp_remote_retrieve_header($final, 'content-type'), 'text/html') !== false ? $target : '';
+        return $remember(!is_wp_error($final) && wp_remote_retrieve_response_code($final) === 200 && stripos(wp_remote_retrieve_header($final, 'content-type'), 'text/html') !== false ? $target : '');
     }
 
     public static function canonical($html, $url, $value) {
@@ -38,7 +48,7 @@ class GSCSF_Repairs {
         return array();
     }
 
-    public static function analyze($html, $url, $post, $safe) {
+    public static function analyze($html, $url, $post, $safe, $fresh = true) {
         $dom = GSCSF_Audit::document($html); if (!$dom) { return array(); }
         $x = new DOMXPath($dom); $out = array();
         $root = $x->query('/html')->item(0);
@@ -56,7 +66,7 @@ class GSCSF_Repairs {
                 if ($linked_id && untrailingslashit(get_permalink($linked_id)) === untrailingslashit($source)) { continue; }
                 if (count($anchors) >= 2) { break; }
                 $anchors[$source] = true;
-                $target = self::redirect_target($source);
+                $target = self::redirect_target($source, $fresh);
                 if ($target) {
                     $issue = GSCSF_Audit::issue('internal_redirect_' . md5($source), 'Internal link ' . $source . ' permanently redirects to verified HTML destination ' . $target . '. Auto Fix can update the rendered link.', true, 'info');
                     $issue['replacement'] = array('from' => $source, 'to' => $target);

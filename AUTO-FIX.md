@@ -1,8 +1,8 @@
-# Website detection and Auto Fix in 5.2.0
+# Website detection and Auto Fix in 5.3.0
 
 Every scan starts by detecting commerce software, public content types, SEO providers and WordPress search visibility. WooCommerce, Easy Digital Downloads, BigCommerce and common catalog post types provide commerce evidence. An installed catalog is evidence of an ecommerce-capable site, not proof that checkout is operational. Unknown commerce integrations can still be scanned through public WordPress types and sitemaps. Product-specific diagnostics apply when Product markup is present; all other diagnostics run on both site types.
 
-Use **Detect Website Type**, choose repair toggles under **Scan settings**, save, then **Scan Website → Auto Fix Solvable Issues**. Detection also runs automatically before each manual or scheduled scan. Automatic mode applies the same enabled repairs after the completed scan. It is independent of the manual Auto Fix button.
+For normal use, click **Scan & Auto Fix**. No configuration or report upload is needed. **Scan Only** performs no repairs. Optional repair toggles, daily scheduling, Ahrefs imports and discovery overrides are under **Advanced options**. Detection also runs automatically before each manual or scheduled scan. The one-click action records automatic repair consent for that run. The separate automatic setting applies to scheduled daily scans. It is independent of the manual Auto Fix button.
 
 ## Automatic repair families
 
@@ -32,6 +32,8 @@ WP Rocket's `rocket_clean_post()` and LiteSpeed's `litespeed_purge_url` are call
 Local checks cover HTTP errors, redirect graphs, robots availability/root rules, noindex, canonical signals, sitemaps, baseline structured data, headings, metadata and bounded linked resources. The UI reports the website profile, candidates, verified repairs and which areas need an external connection or review.
 
 Google URL Inspection provides indexed snapshots and available rich-result errors, not live indexing tests. It does not expose all Search Console reports or let a plugin resolve manual actions, security incidents, Core Web Vitals, all video indexing issues, content quality or Google's indexing/canonical decisions. A successful local repair is not a guarantee of Google indexing or rankings. Full JavaScript rendering, all robots user-agent/path combinations and complete rich-result validation are outside this scanner.
+
+Activation/upgrades pause saved work and disable scheduling until re-enabled. Old results remain available as a clearly labelled saved report. Shared scan probes may be reused within the same scan; repair preflight and verification always request fresh evidence.
 
 Sources reviewed 8 September 2026:
 

@@ -1,7 +1,7 @@
 jQuery(function ($) {
     'use strict';
     var running = false, busy = false, page = 0, timer = null, latest = null;
-    var active = ['detecting', 'posts', 'terms', 'scan', 'summarize', 'fixing'];
+    var active = ['detecting', 'posts', 'history', 'terms', 'scan', 'summarize', 'fixing'];
     function message(text) { $('#gscsf-message').text(text || ''); }
     function request(verb, extra) {
         if (extra instanceof FormData) {
@@ -37,8 +37,13 @@ jQuery(function ($) {
             $('<h3>').text(item.name + ' — ' + item.status).appendTo(coverage);
             $('<p>').text(item.detail).appendTo(coverage);
         });
-        var labels = {idle: 'Ready to scan.', posts: 'Discovering published content…', terms: 'Discovering taxonomy archives…', scan: 'Scanning URLs…', fixing: 'Applying and verifying repairs…', complete: 'Scan completed. Review findings below.', cancelled: 'Operation cancelled; coverage is incomplete.', paused: 'Operation paused after an error. Review the message, then cancel and start a new scan.'};
+        var labels = {idle: 'Ready to scan.', posts: 'Discovering published content…', terms: 'Discovering taxonomy archives…', scan: 'Scanning URLs…', fixing: 'Applying and verifying repairs…', complete: 'Last scan completed. Displaying its saved results.', cancelled: 'Operation cancelled; coverage is incomplete.', paused: 'Operation paused after an error. Review the message, then cancel and start a new scan.'};
         $('#gscsf-status').text((labels[phase] || phase) + (data.job.started ? ' Started: ' + data.job.started : ''));
+        if (phase === 'saved') { $('#gscsf-status').text('Previous saved report' + (data.job.started ? ' from ' + data.job.started : '') + '. No scan is running. Start a new scan to check the website now.'); }
+        if (phase === 'history') { $('#gscsf-status').text('Finding old page addresses saved by WordPress…'); }
+        $('#gscsf-progress').prop('hidden', phase === 'saved' || phase === 'idle');
+        $('#gscsf-start-fix').prop('disabled', isActive || busy);
+        $('#gscsf-discovery').text('Automatic discovery: published content, archives, internal links, saved old page addresses, robots.txt and common sitemap locations. No upload or URL entry is required.' + (phase === 'complete' && !data.sitemap_found ? ' No readable sitemap entries were found; the WordPress and link inventory was still checked.' : ''));
         if (phase === 'detecting') { $('#gscsf-status').text('Identifying website type, commerce software and public content…'); }
         if (phase === 'summarize') { $('#gscsf-status').text('Checking redirect chains, sitemap membership and observed references…'); }
         $('#gscsf-progress').val(c.total ? Math.round(c.done / c.total * 100) : 0);
@@ -108,14 +113,14 @@ jQuery(function ($) {
         busy = true;
         request('tick').done(function (response) {
             if (!response.success) { running = false; message(response.data); return; }
-            render(response.data);
+            latest = response.data;
             running = active.indexOf(response.data.job.phase) !== -1;
         }).fail(function (xhr) {
             if (xhr.status !== 409) { running = false; failure(xhr); }
         }).always(function () {
             busy = false;
             if (latest) { render(latest); }
-            if (running) { timer = setTimeout(pump, 1200); }
+            if (running) { timer = setTimeout(pump, 150); }
         });
     }
     function perform(verb, extra) {
@@ -126,17 +131,18 @@ jQuery(function ($) {
         if (latest) { render(latest); }
         request(verb, extra).done(function (response) {
             if (!response.success) { message(response.data); return; }
-            render(response.data);
+            latest = response.data;
             running = active.indexOf(response.data.job.phase) !== -1;
             if (verb === 'save') { message('Settings saved.'); }
             if (verb === 'import') { message('Audit imported. Click Scan Website to verify the imported URLs against current responses.'); }
         }).fail(function (xhr) { running = false; failure(xhr); }).always(function () {
             busy = false;
             if (latest) { render(latest); }
-            if (running) { timer = setTimeout(pump, 1200); }
+            if (running) { timer = setTimeout(pump, 150); }
         });
     }
     $('#gscsf-start').on('click', function () { page = 0; perform('start'); });
+    $('#gscsf-start-fix').on('click', function () { page = 0; perform('start_fix'); });
     $('#gscsf-detect').on('click', function () { perform('detect'); });
     $('#gscsf-filter').on('change', function () { if (latest) { render(latest); } });
     $('#gscsf-fix').on('click', function () { page = 0; perform('fix'); });
